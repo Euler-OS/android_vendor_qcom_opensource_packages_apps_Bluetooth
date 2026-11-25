@@ -873,6 +873,10 @@ class AvrcpControllerStateMachine extends StateMachine {
         synchronized(AvrcpControllerStateMachine.this) {
             smActive = false;
         }
+        // Stop the cover art (BIP) client with this device: closes its OBEX session, ends its
+        // thread and deletes the images it fetched. A new connection makes a new one.
+        mCoveArtUtils.closeBip(mBipStateMachine);
+        mBipStateMachine = null;
         // we should disacrd, all currently queuedup messages.
         quitNow();
     }
