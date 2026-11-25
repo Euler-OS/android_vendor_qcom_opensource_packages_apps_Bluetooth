@@ -20,7 +20,6 @@ import android.media.MediaMetadata;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.media.MediaMetadata;
-import android.net.Uri;
 import android.util.Log;
 
 import java.util.ArrayList;
@@ -62,6 +61,10 @@ final class TrackInfo {
     private String mCoverArtHandle;
     private String mImageLocation;
     private String mThumbNailLocation;
+    // The image at mImageLocation, decoded for the metadata.
+    private Bitmap mImage;
+    // Cover art larger than this (either side) is decoded at a reduced size.
+    private static final int MAX_COVER_ART_PX = 1024;
 
 
     TrackInfo() {
@@ -102,16 +105,55 @@ final class TrackInfo {
 
     boolean updateImageLocation(String mCAHandle, String mLocation) {
         if (VDBG) Log.d(TAG, " updateImageLocation hndl " + mCAHandle + " location " + mLocation);
-        if (!mCAHandle.equals(mCoverArtHandle) || (mLocation == null)) {
+        // A failed fetch (e.g. storage not mounted yet) reports no handle and no location.
+        if (!mCoverArtHandle.equals(mCAHandle) || (mLocation == null)) {
+            return false;
+        }
+        Bitmap image = decodeCoverArt(mLocation);
+        if (image == null) {
+            Log.w(TAG, "cannot decode cover art " + mLocation);
             return false;
         }
         mImageLocation = mLocation;
+        mImage = image;
         return true;
+    }
+
+    /** Whether this track has cover art (image or thumbnail) for its metadata. */
+    boolean hasCoverArt() {
+        return mImage != null || !UNPOPULATED_ATTRIBUTE.equals(mThumbNailLocation);
+    }
+
+    /**
+     * Keeps the cover art of {@code previous} if it is the same track (same cover art
+     * handle), so that re-sent attributes don't drop the art until it is fetched again.
+     */
+    void keepCoverArt(TrackInfo previous) {
+        if (previous == null || mCoverArtHandle.isEmpty()
+                || !mCoverArtHandle.equals(previous.mCoverArtHandle)) {
+            return;
+        }
+        mImageLocation = previous.mImageLocation;
+        mThumbNailLocation = previous.mThumbNailLocation;
+        mImage = previous.mImage;
+    }
+
+    private static Bitmap decodeCoverArt(String path) {
+        BitmapFactory.Options bounds = new BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        BitmapFactory.decodeFile(path, bounds);
+        BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inSampleSize = 1;
+        while (bounds.outWidth / options.inSampleSize > MAX_COVER_ART_PX
+                || bounds.outHeight / options.inSampleSize > MAX_COVER_ART_PX) {
+            options.inSampleSize *= 2;
+        }
+        return BitmapFactory.decodeFile(path, options);
     }
 
     boolean updateThumbNailLocation(String mCAHandle, String mLocation) {
         if (VDBG) Log.d(TAG, " mCAHandle " + mCAHandle + " location " + mLocation);
-        if (!mCAHandle.equals(mCoverArtHandle) || (mLocation == null)) {
+        if (!mCoverArtHandle.equals(mCAHandle) || (mLocation == null)) {
             return false;
         }
         mThumbNailLocation = mLocation;
@@ -139,11 +181,11 @@ final class TrackInfo {
         mMetaDataBuilder.putLong(MediaMetadata.METADATA_KEY_TRACK_NUMBER, mTrackNum);
         mMetaDataBuilder.putLong(MediaMetadata.METADATA_KEY_NUM_TRACKS, mTotalTracks);
         mMetaDataBuilder.putLong(MediaMetadata.METADATA_KEY_DURATION, mTrackLen);
-        if (mImageLocation != UNPOPULATED_ATTRIBUTE) {
-            Uri imageUri = Uri.parse(mImageLocation);
-            if (VDBG) Log.d(TAG," updating image uri = " + imageUri.toString());
-            mMetaDataBuilder.putString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI,
-                    imageUri.toString());
+        if (mImage != null) {
+            // The decoded image, not its path: the file is on the Bluetooth app's storage,
+            // which media apps can't read by path (scoped storage). MediaSession scales it to
+            // the platform's maximum metadata bitmap size.
+            mMetaDataBuilder.putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, mImage);
         }
         if (mThumbNailLocation != UNPOPULATED_ATTRIBUTE) {
             Bitmap mThumbNailBitmap = BitmapFactory.decodeFile(mThumbNailLocation);
@@ -235,6 +277,7 @@ final class TrackInfo {
         mCoverArtHandle = UNPOPULATED_ATTRIBUTE;
         mImageLocation = UNPOPULATED_ATTRIBUTE;
         mThumbNailLocation = UNPOPULATED_ATTRIBUTE;
+        mImage = null;
     }
 
 }

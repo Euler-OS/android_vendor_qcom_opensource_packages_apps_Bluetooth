@@ -371,6 +371,8 @@ class AvrcpControllerStateMachine extends StateMachine {
 
                 case MESSAGE_PROCESS_TRACK_CHANGED:
                     TrackInfo trackInfo = (TrackInfo)msg.obj;
+                    // Re-sent attributes of the same track keep its cover art.
+                    trackInfo.keepCoverArt(mAddressedPlayer.getCurrentTrackInfo());
                     mAddressedPlayer.updateCurrentTrack((MediaMetadata) trackInfo.getMediaMetaData());
                     BluetoothMediaBrowserService.trackChanged((MediaMetadata) trackInfo.getMediaMetaData());
                     mAddressedPlayer.updateCurrentTrackInfo(trackInfo);
