@@ -503,7 +503,7 @@ class AvrcpControllerStateMachine extends StateMachine {
                 case CoverArtUtils.MESSAGE_BIP_IMAGE_FETCHED:
                 case CoverArtUtils.MESSAGE_BIP_THUMB_NAIL_FETCHED:
                     mCoveArtUtils.processBipAction(mService, mAddressedPlayer,
-                            mRemoteDevice, msg.what, msg);
+                            mRemoteDevice, msg.what, msg, mBipStateMachine);
                     return true;
                 default:
                     return super.processMessage(msg);
